@@ -20,11 +20,15 @@ from .toothfairy import ToothFairy
 from .wbc import WBC
 
 
+def mul255(x):
+    return x * 255
+
+
 def get_dataloader(args):
     transform_train = transforms.Compose([
         transforms.Resize((args.image_size,args.image_size)),
         transforms.ToTensor(),
-        transforms.Lambda(lambda x: x * 255)
+        transforms.Lambda(mul255)
     ])
 
     transform_train_seg = transforms.Compose([
@@ -35,7 +39,7 @@ def get_dataloader(args):
     transform_test = transforms.Compose([
         transforms.Resize((args.image_size, args.image_size)),
         transforms.ToTensor(),
-        transforms.Lambda(lambda x: x * 255)
+        transforms.Lambda(mul255)
     ])
 
     transform_test_seg = transforms.Compose([
