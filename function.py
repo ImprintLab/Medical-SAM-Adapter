@@ -82,11 +82,18 @@ def train_sam(args, net: nn.Module, optimizer, train_loader,
             masks = pack['label'].to(dtype = torch.float32, device = GPUdevice)
             # for k,v in pack['image_meta_dict'].items():
             #     print(k)
-            if 'pt' not in pack:
+            boxes = None
+            if 'box' in pack:
+                boxes = pack['box'].to(dtype=torch.float32, device=GPUdevice)
+                pt = None
+                point_labels = None
+                showp = None
+            elif 'pt' not in pack:
                 imgs, pt, masks = generate_click_prompt(imgs, masks)
             else:
                 pt = pack['pt']
                 point_labels = pack['p_label']
+                showp = pt[..., [1, 0]]
             name = pack['image_meta_dict']['filename_or_obj']
 
             if args.thd:
@@ -101,14 +108,15 @@ def train_sam(args, net: nn.Module, optimizer, train_loader,
 
                 imgs = torchvision.transforms.Resize((args.image_size,args.image_size))(imgs)
                 masks = torchvision.transforms.Resize((args.out_size,args.out_size))(masks)
-            showp = pt[..., [1, 0]]
+            if pt is not None:
+                showp = pt[..., [1, 0]]
 
             mask_type = torch.float32
             ind += 1
             b_size,c,w,h = imgs.size()
             longsize = w if w >=h else h
 
-            if point_labels.clone().flatten()[0] != -1:
+            if point_labels is not None and point_labels.clone().flatten()[0] != -1:
                     # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
                 point_coords = pt
                 coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
@@ -151,10 +159,12 @@ def train_sam(args, net: nn.Module, optimizer, train_loader,
                 if args.net == 'sam' or args.net == 'mobile_sam':
                     se, de = net.prompt_encoder(
                         points=pt,
-                        boxes=None,
+                        boxes=boxes,
                         masks=None,
                     )
                 elif args.net == "efficient_sam":
+                    if boxes is not None:
+                        raise ValueError('Box prompts are not supported by EfficientSAM in this project.')
                     coords_torch,labels_torch = transform_prompt(coords_torch,labels_torch,h,w)
                     se = net.prompt_encoder(
                         coords=coords_torch,
@@ -216,7 +226,8 @@ def train_sam(args, net: nn.Module, optimizer, train_loader,
                     namecat = 'Train'
                     for na in name[:2]:
                         namecat = namecat + na.split('/')[-1].split('.')[0] + '+'
-                    vis_image(origin_imgs/255,pred,masks, os.path.join(args.path_helper['sample_path'], namecat+'epoch+' +str(epoch) + '.jpg'), reverse=False, points=showp)
+                    visual_boxes = boxes * (args.out_size / args.image_size) if boxes is not None else None
+                    vis_image(origin_imgs/255,pred,masks, os.path.join(args.path_helper['sample_path'], namecat+'epoch+' +str(epoch) + '.jpg'), reverse=False, points=showp, boxes=visual_boxes)
 
             pbar.update()
 
@@ -250,7 +261,12 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
             cur_bsz = imgsw.shape[0]
             # for k,v in pack['image_meta_dict'].items():
             #     print(k)
-            if 'pt' not in pack or args.thd:
+            boxesw = None
+            if 'box' in pack:
+                boxesw = pack['box'].to(dtype=torch.float32, device=GPUdevice)
+                ptw = None
+                point_labels = None
+            elif 'pt' not in pack or args.thd:
                 imgsw, ptw, masksw = generate_click_prompt(imgsw, masksw)
             else:
                 ptw = pack['pt']
@@ -264,6 +280,7 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                 evl_ch = int(imgsw.size(-1))
 
             while (buoy + evl_ch) <= imgsw.size(-1):
+                boxes = boxesw if not args.thd else None
                 if args.thd:
                     pt = ptw[:,:,buoy: buoy + evl_ch]
                 else:
@@ -283,14 +300,14 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                     imgs = torchvision.transforms.Resize((args.image_size,args.image_size))(imgs)
                     masks = torchvision.transforms.Resize((args.out_size,args.out_size))(masks)
                 
-                showp = pt[..., [1, 0]]
+                showp = pt[..., [1, 0]] if pt is not None else None
 
                 mask_type = torch.float32
                 ind += 1
                 b_size,c,w,h = imgs.size()
                 longsize = w if w >=h else h
 
-                if point_labels.clone().flatten()[0] != -1:
+                if point_labels is not None and point_labels.clone().flatten()[0] != -1:
                     # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
                     point_coords = pt
                     coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
@@ -313,10 +330,12 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                     if args.net == 'sam' or args.net == 'mobile_sam':
                         se, de = net.prompt_encoder(
                             points=pt,
-                            boxes=None,
+                            boxes=boxes,
                             masks=None,
                         )
                     elif args.net == "efficient_sam":
+                        if boxes is not None:
+                            raise ValueError('Box prompts are not supported by EfficientSAM in this project.')
                         coords_torch,labels_torch = transform_prompt(coords_torch,labels_torch,h,w)
                         se = net.prompt_encoder(
                             coords=coords_torch,
@@ -358,14 +377,15 @@ def validation_sam(args, val_loader, epoch, net: nn.Module, clean_dir=True):
                     tot += lossfunc(pred, masks) * cur_bsz
 
                     '''vis images'''
-                    if ind % args.vis == 0:
+                    if args.vis and ind % args.vis == 0:
                         namecat = 'Test'
                         for na in name[:2
                         
                         ]:
                             img_name = na.split('/')[-1].split('.')[0]
                             namecat = namecat + img_name + '+'
-                        vis_image(origin_imgs/255,pred, masks, os.path.join(args.path_helper['sample_path'], namecat+'epoch+' +str(epoch) + '.jpg'), reverse=False, points=showp)
+                        visual_boxes = boxes * (args.out_size / args.image_size) if boxes is not None else None
+                        vis_image(origin_imgs/255,pred, masks, os.path.join(args.path_helper['sample_path'], namecat+'epoch+' +str(epoch) + '.jpg'), reverse=False, points=showp, boxes=visual_boxes)
                     
 
                     temp = eval_seg(pred, masks, threshold)

@@ -70,6 +70,8 @@ ISIC/
  3. Begin Adapting! run: ``python train.py -net sam -mod sam_adpt -exp_name *msa_test_isic* -sam_ckpt ./checkpoint/sam/sam_vit_b_01ec64.pth -image_size 1024 -b 32 -dataset isic -data_path *../data*``
  change "data_path" and "exp_name" for your own useage. you can change "exp_name" to anything you want.
 
+ Select ISIC prompts with ``-prompt``: ``click`` (default), ``click3``, ``bbox``, ``bbox0.5``, or ``bbox0.75``. For example, add ``-prompt click3`` for three foreground clicks or ``-prompt bbox0.5`` for a box that encloses approximately 50% of foreground pixels. ``bbox0.75`` targets 75% foreground overlap, while ``bbox`` uses the tight ground-truth box. Box prompts are supported with SAM and MobileSAM.
+
  You can descrease the ``image size`` or batch size ``b`` if out of memory.
 
  3. Evaluation: The code can automatically evaluate the model on the test set during traing, set "--val_freq" to control how many epoches you want to evaluate once. You can also run val.py for the independent evaluation.
