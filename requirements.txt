@@ -1,0 +1,23 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch
+torchvision
+
+numpy
+scipy
+pandas
+scikit-learn
+scikit-image
+matplotlib
+tqdm
+pillow
+pyyaml
+
+monai
+nibabel
+opencv-python-headless
+timm
+einops
+tensorboardX
+tensorboard
+seaborn
+SimpleITK
